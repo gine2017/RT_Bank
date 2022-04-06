@@ -6,30 +6,40 @@ import org.junit.runner.JUnitCore;
 import org.junit.runner.Result;
 import org.junit.runner.notification.Failure;
 
-import static org.junit.Assert.*;
-import static org.hamcrest.CoreMatchers.*;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+
+import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.notNullValue;
+import static org.junit.Assert.assertThat;
 import java.util.Scanner;
 import java.io.File;
 import java.io.BufferedReader;
 import java.io.FileReader;
 
-public class CheckingAccountTestFixture {
-    public static Logger logger = LogManager.getLogger(CheckingAccountTestFixture.class);
+/* TODO: Add these lines to build.gradle:
+task runSavingsFixture(type: JavaExec) {
+    group = "Execution"
+    description = "Run SavingsAccountTestFixture class"
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = "SavingsAccountTestFixture"
+}
+ */
+
+public class SavingsAccountTestFixture {
+    public static Logger logger = LogManager.getLogger(SavingsAccountTestFixture.class);
     // TODO We should probably read the file from classpath instead of hardcoding the pathname
-    static final String TEST_FILE = "src/test/resources/CheckingAccountTest.csv";
+    static final String TEST_FILE = "src/test/resources/SavingsAccountTest.csv";
 
     record TestScenario(double initBalance,
-                        List<Double> checks,
+                        double interestRate,
                         List<Double> withdrawals,
                         List<Double> deposits,
-                        boolean runMonthEnd,
+                        int runMonthEndNTimes,
                         double endBalance
     ) { }
 
@@ -44,15 +54,10 @@ public class CheckingAccountTestFixture {
         for (int testNum = 0; testNum < testScenarios.size(); testNum++) {
             TestScenario scenario = testScenarios.get(testNum);
             logger.info("**** Running test for {}", scenario);
-
-            // set up account with specified starting balance
-            CheckingAccount ca = new CheckingAccount(
+               CheckingAccount ca = new CheckingAccount(
                     "test "+testNum, scenario.initBalance, new Owner("TEST_"+testNum));
 
-            // now process checks, withdrawals, deposits
-            for (double checkAmount : scenario.checks) {
-                ca.writeCheck("CHECK", checkAmount);
-            }
+         
             for (double withdrawalAmount : scenario.withdrawals) {
                 ca.withdraw(withdrawalAmount);
             }
@@ -61,23 +66,20 @@ public class CheckingAccountTestFixture {
             }
 
             // run month-end if desired and output register
-            if (scenario.runMonthEnd) {
-                ca.monthEnd();
-                for (Map.Entry<String, Double> entry : ca.getRegisterEntries()) {
-                    logger.info("Register Entry -- {}: {}", entry.getKey(), entry.getValue());
-
-                }
+            if (scenario.runMonthEndNTimes > 0) {
+                // TODO: Add code to run month-end....
             }
 
             // make sure the balance is correct
-            assertThat("Test #" + testNum + ":" + scenario, ca.getBalance(), is(scenario.endBalance));
+            // TODO: add code to verify balance
+
         }
     }
 
     private static void runJunitTests() {
         JUnitCore jc = new JUnitCore();
         jc.addListener(new TextListener(System.out));
-        Result r = jc.run(CheckingAccountTestFixture.class);
+        Result r = jc.run(SavingsAccountTestFixture.class);
         System.out.printf("Tests run: %d Passed: %d Failed: %d\n",
                 r.getRunCount(), r.getRunCount() - r.getFailureCount(), r.getFailureCount());
         System.out.println("Failures:");
@@ -86,7 +88,7 @@ public class CheckingAccountTestFixture {
         }
     }
 
-    // TODO this could be added to TestScenario class
+    // NOTE: this could be added to TestScenario class
     private static List<Double> parseListOfAmounts(String amounts) {
         if (amounts.trim().isEmpty()) {
             return List.of();
@@ -100,23 +102,22 @@ public class CheckingAccountTestFixture {
         return ret;
     }
 
-    // TODO this could be added to TestScenario class
+    // NOTE: this could be added to TestScenario class
     private static TestScenario parseScenarioString(String scenarioAsString) {
         String [] scenarioValues = scenarioAsString.split(",");
         // should probably validate length here
         double initialBalance = Double.parseDouble(scenarioValues[0]);
-        List<Double> checks = parseListOfAmounts(scenarioValues[1]);
+        // TODO: parse the rest of your fields
         List<Double> wds = parseListOfAmounts(scenarioValues[2]);
-        List<Double> deps = parseListOfAmounts(scenarioValues[3]);
-        double finalBalance = Double.parseDouble(scenarioValues[4]);
+        // TODO: Replace dummy values with your field values to populate TestScenario object
         TestScenario scenario = new TestScenario(
-                initialBalance, checks, wds, deps, false, finalBalance
+                initialBalance, 0.0, null, null, 0, 0.0
         );
         return scenario;
     }
 
     private static List<TestScenario> parseScenarioStrings(String ... scenarioStrings) {
-        logger.info("Running test scenarios...");
+        logger.info("Parsing test scenarios...");
         List<TestScenario> scenarios = new ArrayList<>();
         for (String scenarioAsString : scenarioStrings) {
             if (scenarioAsString.trim().isEmpty()) {
@@ -129,51 +130,35 @@ public class CheckingAccountTestFixture {
     }
 
     public static void main(String [] args) throws IOException {
-           System.out.println("START");
+        System.out.println("START TESTING");
         Scanner in = new Scanner(System.in); 
         System.out.println("Enter file path");
         String s = in.nextLine(); //C:\\testing.txt
         BufferedReader br = new BufferedReader(new FileReader(s));
+        // TODO: determine if we're running tests from file or cmdline
+        // Note: testsFromFile is just a suggestion, you don't have to use testsFromFile or even an if/then statement!
+        boolean testsFromFile = false;
 
-        // We can:
-        // ... manually populate the list of scenarios we want to test...
-        System.out.println("\n\n****** FROM OBJECTS ******\n");
-        testScenarios = List.of(
-                new TestScenario(100, List.of(), List.of(), List.of(), false, 100),
-                new TestScenario(100, List.of(10d), List.of(), List.of(), false, 90),
-                new TestScenario(100, List.of(10.,20.), List.of(), List.of(10.), true, 80)
-                );
-        runJunitTests();
-
-        // ...or create scenarios from a collection of strings...
-        // Format for each line: BALANCE,check_amt|check_amt|...,withdraw_amt|...,deposit_amt|...,end_balance
-        // note we left out runMonthEnd from our file format
-
-        // Same scenarios as above plus one more to verify it's running these string scenarios
-        System.out.println("\n\n****** FROM STRINGS ******\n");
-        String [] scenarioStrings = {
-                "0, , , 10|20, 30",
-                "100, , , , 100",
-                "100, 10, , , 90",
-                "100, 10|20, , 10, 80"
-        };
-        List<TestScenario> parsedScenarios = parseScenarioStrings(scenarioStrings);
-        testScenarios = parsedScenarios;
-        runJunitTests();
-
-        // ...or populate with scenarios from a CSV file...
-        // now load these same scenarios from a file plus one more
-        System.out.println("\n\n****** FROM FILE ******\n");
-        // We could get the filename from the cmdline, e.g. "-f CheckingAccountScenarios.csv"
-        List<String> scenarioStringsFromFile = Files.readAllLines(Paths.get(TEST_FILE));
-        testScenarios = parseScenarioStrings(scenarioStringsFromFile.toArray(String[]::new));
-        runJunitTests();
-
-        // ...or, we could also specify a single scenario on the command line,
-        // for example "-t '10, 20|20, , 40|10, 0'"
-        // Note the single-quotes because of the embedded spaces and the pipe symbol
-        System.out.println("Command-line arguments passed in: " + java.util.Arrays.asList(args));
-        
+        // Note: this is just a suggestion, you don't have to use testsFromFile or even an if/then statement!
+        if (testsFromFile) {
+            // if populating with scenarios from a CSV file...
+            // TODO: We could get the filename from the cmdline, e.g. "-f CheckingAccountScenarios.csv"
+            System.out.println("\n\n****** FROM FILE ******\n");
+            // TODO: get filename from cmdline and use instead of TEST_FILE constant
+            List<String> scenarioStringsFromFile = Files.readAllLines(Paths.get(TEST_FILE));
+            // Note: toArray converts from a List to an array
+            testScenarios = parseScenarioStrings(scenarioStringsFromFile.toArray(String[]::new));
+            runJunitTests();
+        }
+        else {
+            // if specifying a scenario on the command line,
+            // for example "-t '10, 20|20, , 40|10, 0'"
+            // Note the single-quotes above ^^^ because of the embedded spaces and the pipe symbol
+            System.out.println("Command-line arguments passed in: " + java.util.Arrays.asList(args));
+            // TODO: "parse" scenario into a suitable string
+            // TODO: get TestScenario object from above string and store to testScenarios static var
+            runJunitTests();
+        }
         System.out.println("DONE");
     }
 }
